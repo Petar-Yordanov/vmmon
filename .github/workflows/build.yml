@@ -16,8 +16,8 @@ jobs:
         include:
           - name: ubuntu
             mode: ubuntu
-            containerImage: ""
-            containerOptions: ""
+            containerImage: ubuntu:24.04
+            containerOptions: --device=/dev/kvm
           - name: fedora
             mode: fedora
             containerImage: fedora:41
