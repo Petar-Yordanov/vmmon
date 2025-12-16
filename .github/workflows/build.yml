@@ -58,7 +58,18 @@ jobs:
         run: |
           cargo build -p vmmon --release
 
-      - name: Run vmmon with KVM access
+      - name: Run vmmon with KVM access (Ubuntu)
+        if: matrix.mode == 'ubuntu'
+        shell: bash
         run: |
-          sudo usermod -aG kvm $USER
-          sudo -E sg kvm -c './target/release/vmmon'
+          set -euxo pipefail
+          me="$(id -un)"
+          sudo usermod -aG kvm "$me"
+          sg kvm -c './target/release/vmmon'
+
+      - name: Run vmmon with KVM access (Fedora)
+        if: matrix.mode == 'fedora'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./target/release/vmmon
