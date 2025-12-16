@@ -51,19 +51,17 @@ jobs:
             ca-certificates curl \
             qemu-system-x86 qemu-img
 
-      - name: Debug KVM
-        run: |
-          ls -l ./target/release/vmmon || true
-          file ./target/release/vmmon || true
-          ls -l /dev/kvm || echo "/dev/kvm missing"
-          id
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build (release)
         run: |
           cargo build -p vmmon --release
+
+      - name: Run vmmon with KVM access
+        run: |
+          sudo usermod -aG kvm $USER
+          sudo -E sg kvm -c './target/release/vmmon'
 
       - name: Run (release)
         run: ./target/release/vmmon
