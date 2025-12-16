@@ -70,7 +70,7 @@ jobs:
         run: |
           set -euxo pipefail
           me="$(id -un)"
-          sudo usermod -aG kvm "$me"
+          usermod -aG kvm "$me"
           sg kvm -c './target/release/vmmon'
 
       - name: Run vmmon with KVM access (Fedora)
