@@ -62,6 +62,3 @@ jobs:
         run: |
           sudo usermod -aG kvm $USER
           sudo -E sg kvm -c './target/release/vmmon'
-
-      - name: Run (release)
-        run: ./target/release/vmmon
