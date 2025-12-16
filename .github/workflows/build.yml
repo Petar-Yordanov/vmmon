@@ -51,6 +51,13 @@ jobs:
             ca-certificates curl \
             qemu-system-x86 qemu-img
 
+      - name: Debug KVM
+        run: |
+          ls -l ./target/release/vmmon || true
+          file ./target/release/vmmon || true
+          ls -l /dev/kvm || echo "/dev/kvm missing"
+          id
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
