@@ -1,0 +1,59 @@
+name: vmmon
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu
+            mode: ubuntu
+          - name: fedora
+            mode: fedora
+
+    container: ${{ matrix.mode == 'fedora' && 'fedora:41' || '' }}
+
+    steps:
+      - name: Install git (Fedora container)
+        if: matrix.mode == 'fedora'
+        run: |
+          dnf -y update
+          dnf -y install git ca-certificates curl
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install deps (Ubuntu)
+        if: matrix.mode == 'ubuntu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential pkg-config \
+            clang lld \
+            make \
+            ca-certificates curl \
+            qemu-system-x86 qemu-utils
+
+      - name: Install deps (Fedora)
+        if: matrix.mode == 'fedora'
+        run: |
+          dnf -y install \
+            gcc gcc-c++ make pkgconf-pkg-config \
+            clang lld \
+            ca-certificates curl \
+            qemu-system-x86 qemu-img
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build (release)
+        run: |
+          cargo build -p vmmon --release
