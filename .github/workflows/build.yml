@@ -16,10 +16,16 @@ jobs:
         include:
           - name: ubuntu
             mode: ubuntu
+            containerImage: ""
+            containerOptions: ""
           - name: fedora
             mode: fedora
+            containerImage: fedora:41
+            containerOptions: --device=/dev/kvm
 
-    container: ${{ matrix.mode == 'fedora' && 'fedora:41' || '' }}
+    container:
+      image: ${{ matrix.containerImage }}
+      options: ${{ matrix.containerOptions }}
 
     steps:
       - name: Install git (Fedora container)
