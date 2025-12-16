@@ -69,6 +69,10 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
+          if [[ "$(id -u)" -eq 0 ]]; then
+            ./target/release/vmmon
+            exit 0
+          fi
           me="$(id -un)"
           usermod -aG kvm "$me"
           sg kvm -c './target/release/vmmon'
