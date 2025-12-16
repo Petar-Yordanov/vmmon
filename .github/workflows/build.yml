@@ -57,3 +57,6 @@ jobs:
       - name: Build (release)
         run: |
           cargo build -p vmmon --release
+
+      - name: Run (release)
+        run: ./target/release/vmmon
