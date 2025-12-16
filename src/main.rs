@@ -64,6 +64,7 @@ fn run_vcpu(mut vcpu: VcpuFd) -> Result<()> {
         match vcpu.run()? {
             VcpuExit::Hlt => {
                 println!("Guest executed HLT");
+                break;
             }
             VcpuExit::Shutdown => {
                 println!("Guest shutdown");
