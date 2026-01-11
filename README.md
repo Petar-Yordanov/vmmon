@@ -139,43 +139,28 @@ The VMM loads the kernel ELF into guest RAM, enters 64-bit long mode, provides t
 
 ## Roadmap
 
-- [ ] **VMM core**
-  - [ ] Create KVM VM + vCPU
-  - [ ] Allocate guest RAM and register `KVM_SET_USER_MEMORY_REGION`
-  - [ ] vCPU run loop with exit dispatch (PIO + MMIO)
-  - [ ] Basic debug console (port `0xE9` or 16550 COM1)
+- [ ] **VMM foundation**
+  - [ ] Create KVM VM + vCPU(s)
+  - [ ] Allocate guest RAM + map it into KVM
+  - [ ] vCPU run loop + exit dispatch (PIO/MMIO)
+  - [ ] Debug output from guest (port `0xE9` and/or COM1)
 
-- [ ] **Boot to 64-bit (long mode)**
-  - [ ] Build guest page tables (PML4/PDPT/PD/PT)
-  - [ ] Map low identity region (bootstrap + page tables + stack)
-  - [ ] Map kernel virtual addresses to the chosen physical load addresses (supports higher-half)
-  - [ ] Set CR0/CR4/EFER + 64-bit segments, then run a 64-bit smoke test
+- [ ] **Boot MicrOS**
+  - [ ] Enter 64-bit long mode (page tables + control regs)
+  - [ ] Load MicrOS ELF into guest memory
+  - [ ] Implement the minimal Limine protocol responses MicrOS needs
+  - [ ] Jump to kernel entry and reach early serial logs
 
-- [ ] **Direct-load the kernel (no bootloader)**
-  - [ ] ELF64 loader: copy `PT_LOAD` segments into guest RAM, zero BSS
-  - [ ] Allocate a guest stack, set initial `RSP`
-  - [ ] Set initial `RIP` to kernel entry (or a tiny trampoline)
+- [ ] **Minimal platform MicrOS expects**
+  - [ ] KVM irqchip setup (so MicrOS can use APIC timer + IRQs)
+  - [ ] Shutdown/reboot handling (KVM exits mapped to clean host behavior)
+  - [ ] Expose RTC/time data (MicrOS reads RTC; keep it consistent)
 
-- [ ] **Limine protocol support (boot contract)**
-  - [ ] Locate Limine request pointers in the kernel image (ELF section)
-  - [ ] Allocate and fill required Limine responses in guest RAM (minimum set used by the kernel)
-  - [ ] Write response pointers back into the requests
-  - [ ] Jump to kernel entry and reach kernel early log
-
-- [ ] **Minimal platform**
-  - [ ] In-kernel irqchip
-  - [ ] Clean shutdown/reset handling
-
-- [ ] **PCI**
-  - [ ] PCI config space emulation
-  - [ ] BAR routing to MMIO/PIO handlers
-
-- [ ] **Virtio (to run the OS normally)**
-  - [ ] virtio-pci capabilities (common/notify/isr/device cfg)
-  - [ ] virtqueue implementation
-  - [ ] virtio-blk
-  - [ ] virtio-input
-  - [ ] Interrupt delivery
+- [ ] **Devices**
+  - [ ] PCI config space (enough for enumeration)
+  - [ ] virtio-blk backed by a host file (`disk.img`) for MicrOS FAT16/VFS
+  - [ ] virtio-input events (keyboard + mouse)
+  - [ ] Interrupt delivery for virtio (polling first, then proper IRQs)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
