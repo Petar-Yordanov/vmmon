@@ -7,3 +7,5 @@ edition = "2024"
 kvm-ioctls = "0.24"
 kvm-bindings = "0.14"
 memmap2 = "0.9"
+goblin = "0.8"
+clap = { version = "4", features = ["derive"] }
