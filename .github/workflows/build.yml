@@ -34,4 +34,10 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          ./target/release/vmmon ./kernel.elf
+
+          ls -l /dev/kvm || true
+          id || true
+          groups || true
+          getent group kvm || true
+
+          sudo ./target/release/vmmon ./kernel.elf
