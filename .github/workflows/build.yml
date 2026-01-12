@@ -35,9 +35,4 @@ jobs:
         run: |
           set -euxo pipefail
 
-          ls -l /dev/kvm || true
-          id || true
-          groups || true
-          getent group kvm || true
-
           sudo ./target/release/vmmon ./kernel.elf
