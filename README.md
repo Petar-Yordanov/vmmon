@@ -131,8 +131,8 @@ The VMM loads the kernel ELF into guest RAM, enters 64-bit long mode, provides t
 ## Usage
 
 ```sh
-  # Run (debug)
-  cargo run -p vmmon
+  # Run (Debug)
+  cargo run -p vmmon -- ./kernel.elf --mem-mib 1024
 ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>

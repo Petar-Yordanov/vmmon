@@ -1,4 +1,4 @@
-name: vmmon
+name: CI
 
 on:
   push:
@@ -6,81 +6,33 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-test:
-    name: ${{ matrix.name }}
+  vmmon:
+    name: vmmon
     runs-on: ubuntu-latest
 
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: ubuntu
-            mode: ubuntu
-            containerImage: ubuntu:24.04
-            containerOptions: --device=/dev/kvm
-          - name: fedora
-            mode: fedora
-            containerImage: fedora:41
-            containerOptions: --device=/dev/kvm
-
-    container:
-      image: ${{ matrix.containerImage }}
-      options: ${{ matrix.containerOptions }}
-
     steps:
-      - name: Install git (Fedora container)
-        if: matrix.mode == 'fedora'
-        run: |
-          dnf -y update
-          dnf -y install git ca-certificates curl
-
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install deps (Ubuntu)
-        if: matrix.mode == 'ubuntu'
+      - name: Install deps
         run: |
-          apt-get update
-          apt-get install -y \
+          sudo apt-get update
+          sudo apt-get install -y \
             build-essential pkg-config \
             clang lld \
-            make \
-            ca-certificates curl \
+            ca-certificates \
             qemu-system-x86 qemu-utils
-
-      - name: Install deps (Fedora)
-        if: matrix.mode == 'fedora'
-        run: |
-          dnf -y install \
-            gcc gcc-c++ make pkgconf-pkg-config \
-            clang lld \
-            ca-certificates curl \
-            qemu-system-x86 qemu-img
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build (release)
+      - name: Build vmmon (release)
         run: |
           cargo build -p vmmon --release
 
-      - name: Run vmmon with KVM access (Ubuntu)
-        if: matrix.mode == 'ubuntu'
+      - name: Run vmmon
         shell: bash
         run: |
           set -euxo pipefail
-          if [[ "$(id -u)" -eq 0 ]]; then
-            ./target/release/vmmon
-            exit 0
-          fi
-          me="$(id -un)"
-          usermod -aG kvm "$me"
-          sg kvm -c './target/release/vmmon'
 
-      - name: Run vmmon with KVM access (Fedora)
-        if: matrix.mode == 'fedora'
-        shell: bash
-        run: |
-          set -euxo pipefail
-          ls -l /dev/kvm
-          ./target/release/vmmon
+          sudo ./target/release/vmmon ./kernel.elf
