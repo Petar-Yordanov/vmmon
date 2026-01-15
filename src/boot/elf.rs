@@ -27,10 +27,8 @@ pub fn load_elf64(
 ) -> Result<ElfLoadResult> {
     let elf = Elf::parse(elf_bytes).map_err(|e| VmmonError::elf(e.to_string()))?;
 
-    // PIE base
     let load_base = layout.kernel_load_phys;
 
-    // Load PT_LOAD segments at (load_base + p_vaddr)
     let mut segs = Vec::new();
     for ph in elf
         .program_headers
@@ -60,7 +58,6 @@ pub fn load_elf64(
         });
     }
 
-    // Apply dynamic RELA relocations
     for rela in &elf.dynrelas {
         let r_type = rela.r_type;
         let r_off = rela.r_offset;

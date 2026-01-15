@@ -16,11 +16,11 @@ pub fn build_long_mode_boot_state(
     layout: &GuestLayout,
     load: &ElfLoadResult,
     mut sregs: kvm_sregs,
+    guest_mem_size_bytes: u64,
 ) -> Result<BootState> {
-    let cr3 = build_paging(mem, layout)?;
+    let cr3 = build_paging(mem, layout, load, guest_mem_size_bytes)?;
     build_gdt(mem, layout)?;
 
-    // Write a real-mode bootstrap stub
     let stub_phys: u64 = 0x1000;
     write_long_mode_stub(
         mem,
@@ -63,15 +63,21 @@ fn build_gdt(mem: &mut GuestMemory, layout: &GuestLayout) -> Result<()> {
     Ok(())
 }
 
-fn build_paging(mem: &mut GuestMemory, layout: &GuestLayout) -> Result<u64> {
-    // Identity map first 1GiB with 2MiB pages
+const HHDM_OFFSET: u64 = 0xffff_8000_0000_0000;
+
+fn build_paging(
+    mem: &mut GuestMemory,
+    layout: &GuestLayout,
+    load: &ElfLoadResult,
+    guest_mem_size_bytes: u64,
+) -> Result<u64> {
     let pml4_pa = layout.page_tables_phys;
-    let pdpt_pa = pml4_pa + 0x1000;
-    let pd_pa = pdpt_pa + 0x1000;
+    let pdpt0_pa = pml4_pa + 0x1000;
+    let pd0_pa = pdpt0_pa + 0x1000;
 
     mem.write_zeros(pml4_pa, 0x1000);
-    mem.write_zeros(pdpt_pa, 0x1000);
-    mem.write_zeros(pd_pa, 0x1000);
+    mem.write_zeros(pdpt0_pa, 0x1000);
+    mem.write_zeros(pd0_pa, 0x1000);
 
     const P: u64 = 1 << 0;
     const W: u64 = 1 << 1;
@@ -82,15 +88,72 @@ fn build_paging(mem: &mut GuestMemory, layout: &GuestLayout) -> Result<u64> {
         (addr & 0x000f_ffff_ffff_f000) | flags
     }
 
-    mem.write(pml4_pa + 0 * 8, &pte(pdpt_pa, P | W).to_le_bytes());
-    mem.write(pdpt_pa + 0 * 8, &pte(pd_pa, P | W).to_le_bytes());
+    mem.write(pml4_pa + 0 * 8, &pte(pdpt0_pa, P | W).to_le_bytes());
+    mem.write(pdpt0_pa + 0 * 8, &pte(pd0_pa, P | W).to_le_bytes());
 
     for i in 0..512u64 {
         let pa = i * 0x200000;
-        mem.write(pd_pa + i * 8, &pte(pa, P | W | PS).to_le_bytes());
+        mem.write(pd0_pa + i * 8, &pte(pa, P | W | PS).to_le_bytes());
     }
 
+    map_hhdm_2mib(
+        mem,
+        pml4_pa,
+        layout.page_tables_phys + 0x4000,
+        guest_mem_size_bytes,
+    )?;
+
     Ok(pml4_pa)
+}
+
+fn map_hhdm_2mib(
+    mem: &mut GuestMemory,
+    pml4_pa: u64,
+    scratch_pa: u64,
+    guest_mem_size_bytes: u64,
+) -> Result<()> {
+    const P: u64 = 1 << 0;
+    const W: u64 = 1 << 1;
+    const PS: u64 = 1 << 7;
+
+    #[inline(always)]
+    fn pte(addr: u64, flags: u64) -> u64 {
+        (addr & 0x000f_ffff_ffff_f000) | flags
+    }
+
+    let pml4i = ((HHDM_OFFSET >> 39) & 0x1ff) as u64;
+
+    let pdpt_hi_pa = scratch_pa;
+    mem.write_zeros(pdpt_hi_pa, 0x1000);
+    mem.write(pml4_pa + pml4i * 8, &pte(pdpt_hi_pa, P | W).to_le_bytes());
+
+    let bytes_per_pdpt: u64 = 0x4000_0000; // 1GiB
+    let num_pdpt_entries = (guest_mem_size_bytes + bytes_per_pdpt - 1) / bytes_per_pdpt;
+
+    let mut next_pd_pa = pdpt_hi_pa + 0x1000;
+
+    for pdpt_index in 0..num_pdpt_entries {
+        let pd_pa = next_pd_pa;
+        next_pd_pa += 0x1000;
+
+        mem.write_zeros(pd_pa, 0x1000);
+        mem.write(
+            pdpt_hi_pa + (pdpt_index * 8),
+            &pte(pd_pa, P | W).to_le_bytes(),
+        );
+
+        let chunk_phys_base = pdpt_index * bytes_per_pdpt;
+        let chunk_bytes = (guest_mem_size_bytes - chunk_phys_base).min(bytes_per_pdpt);
+
+        let num_pd_entries = ((chunk_bytes + 0x200000 - 1) / 0x200000).min(512);
+
+        for i in 0..num_pd_entries {
+            let pa = chunk_phys_base + i * 0x200000;
+            mem.write(pd_pa + (i * 8), &pte(pa, P | W | PS).to_le_bytes());
+        }
+    }
+
+    Ok(())
 }
 
 fn write_long_mode_stub(
@@ -130,7 +193,7 @@ fn write_long_mode_stub(
     // rdmsr
     code.extend_from_slice(&[0x0F, 0x32]);
     // or eax, 0x100 (LME)
-    code.extend_from_slice(&[0x66, 0x0D, 0x00, 0x01, 0x00, 0x00]);
+    code.extend_from_slice(&[0x66, 0x0D, 0x00, 0x09, 0x00, 0x00]);
     // wrmsr
     code.extend_from_slice(&[0x0F, 0x30]);
 
@@ -172,29 +235,23 @@ fn write_long_mode_stub(
     // jmp rax
     code.extend_from_slice(&[0xFF, 0xE0]);
 
-    // gdt ptr (6 bytes) for lgdt in real mode: limit16 + base32
     let gdt_ptr_off = code.len() as u32;
     let gdt_limit: u16 = (3 * 8 - 1) as u16;
     code.extend_from_slice(&gdt_limit.to_le_bytes());
     code.extend_from_slice(&(gdt_phys as u32).to_le_bytes());
 
-    // Patch lgdt disp16 (absolute address within first 64KiB)
     let gdt_ptr_addr = stub_phys + gdt_ptr_off as u64;
     let disp16 = gdt_ptr_addr as u16;
     code[lgdt_disp_pos..lgdt_disp_pos + 2].copy_from_slice(&disp16.to_le_bytes());
 
-    // Patch CR3 imm32
     code[cr3_imm_pos..cr3_imm_pos + 4].copy_from_slice(&(cr3 as u32).to_le_bytes());
 
-    // Patch far jump off32 to absolute address (stub_phys + long_off)
     let long_abs = (stub_phys as u32).wrapping_add(long_off);
     code[far_jmp_off_pos..far_jmp_off_pos + 4].copy_from_slice(&long_abs.to_le_bytes());
 
-    // Patch RSP imm64 and kernel entry imm64
     code[rsp_imm_pos..rsp_imm_pos + 8].copy_from_slice(&stack_top.to_le_bytes());
     code[entry_imm_pos..entry_imm_pos + 8].copy_from_slice(&kernel_entry.to_le_bytes());
 
-    // Write stub into guest RAM
     mem.write(stub_phys, &code);
 
     Ok(())

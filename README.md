@@ -139,26 +139,30 @@ The VMM loads the kernel ELF into guest RAM, enters 64-bit long mode, provides t
 
 ## Roadmap
 
-- [ ] **VMM foundation**
-  - [ ] Create KVM VM + vCPU(s)
-  - [ ] Allocate guest RAM + map it into KVM
-  - [ ] vCPU run loop + exit dispatch (PIO/MMIO)
-  - [ ] Debug output from guest (port `0xE9` and/or COM1)
+- [x] **VMM foundation**
+  - [x] Create KVM VM + vCPU(s)
+  - [x] Allocate guest RAM + map it into KVM
+  - [x] vCPU run loop + exit dispatch (PIO/MMIO)
+  - [x] Debug output from guest
 
-- [ ] **Boot MicrOS**
-  - [ ] Enter 64-bit long mode (page tables + control regs)
-  - [ ] Load MicrOS ELF into guest memory
-  - [ ] Implement the minimal Limine protocol responses MicrOS needs
-  - [ ] Jump to kernel entry and reach early serial logs
+- [x] **Boot MicrOS**
+  - [x] Enter 64-bit long mode (page tables + control regs)
+  - [x] Load MicrOS ELF into guest memory
+  - [x] Implement the minimal Limine protocol responses MicrOS needs
+  - [x] Jump to kernel entry and reach early serial logs
 
 - [ ] **Minimal platform MicrOS expects**
   - [ ] KVM irqchip setup (so MicrOS can use APIC timer + IRQs)
   - [ ] Shutdown/reboot handling (KVM exits mapped to clean host behavior)
-  - [ ] Expose RTC/time data (MicrOS reads RTC; keep it consistent)
+  - [x] Expose RTC/time data (MicrOS reads RTC; keep it consistent)
 
 - [ ] **Devices**
   - [ ] PCI config space (enough for enumeration)
-  - [ ] virtio-blk backed by a host file (`disk.img`) for MicrOS FAT16/VFS
+    - [x] Uart16550
+    - [x] Pic8259
+    - [x] CmosRtc
+    - [x] Dma8237
+  - [ ] virtio-blk backed by a host file (`disk.img`) for MicrOS FAT32/ext2/VFS
   - [ ] virtio-input events (keyboard + mouse)
   - [ ] Interrupt delivery for virtio (polling first, then proper IRQs)
 
