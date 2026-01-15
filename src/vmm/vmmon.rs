@@ -1,9 +1,9 @@
-use crate::devices::serial::uart16550::Uart16550;
 use kvm_ioctls::VcpuExit;
 
 use crate::{
     app::config::VmConfig,
-    boot::{elf, long_mode},
+    boot::{elf, limine, long_mode},
+    devices::Devices,
     guest::{layout::GuestLayout, memory::GuestMemory},
     kvm::{host::KvmHost, vcpu::KvmVcpu, vm::KvmVm},
     vmm::{Result, VmExitInfo, VmExitReason},
@@ -15,7 +15,7 @@ pub struct Vmmon {
     vcpu: KvmVcpu,
     _guest: GuestMemory,
 
-    uart: Uart16550,
+    devices: Devices,
 }
 
 impl Vmmon {
@@ -31,12 +31,24 @@ impl Vmmon {
         let elf_bytes = std::fs::read(&cfg.kernel_path)?;
         let load = elf::load_elf64(&mut guest, &layout, &elf_bytes)?;
 
+        limine::install::install_minimal_limine(
+            &mut guest,
+            &layout,
+            &load,
+            cfg.mem_size_bytes as u64,
+        )?;
+
         let vcpu = vm.create_vcpu(0)?;
         vcpu.setup_cpuid(&host)?;
 
         let sregs_template = vcpu.vcpu.get_sregs()?;
-        let boot_state =
-            long_mode::build_long_mode_boot_state(&mut guest, &layout, &load, sregs_template)?;
+        let boot_state = long_mode::build_long_mode_boot_state(
+            &mut guest,
+            &layout,
+            &load,
+            sregs_template,
+            cfg.mem_size_bytes as u64,
+        )?;
 
         if let Err(e) = vcpu.set_sregs(&boot_state.sregs) {
             eprintln!("KVM_SET_SREGS failed: {e}");
@@ -48,14 +60,15 @@ impl Vmmon {
             return Err(e);
         }
 
-        let uart = Uart16550::new(0x3F8);
+        let mut devices = Devices::new();
+        devices.register_default_platform();
 
         Ok(Self {
             _host: host,
             _vm: vm,
             vcpu,
             _guest: guest,
-            uart,
+            devices,
         })
     }
 
@@ -63,12 +76,27 @@ impl Vmmon {
         loop {
             match self.vcpu.run()? {
                 VcpuExit::Hlt => return Ok(VmExitInfo::hlt()),
-                VcpuExit::Shutdown => return Ok(VmExitInfo::shutdown()),
+                VcpuExit::Shutdown => {
+                    let regs = self.vcpu.vcpu.get_regs()?;
+                    let sregs = self.vcpu.vcpu.get_sregs()?;
+                    eprintln!(
+                        "shutdown: rip={:#x} rsp={:#x} rflags={:#x} cr0={:#x} cr3={:#x} cr4={:#x} efer={:#x}",
+                        regs.rip,
+                        regs.rsp,
+                        regs.rflags,
+                        sregs.cr0,
+                        sregs.cr3,
+                        sregs.cr4,
+                        sregs.efer
+                    );
+                    return Ok(VmExitInfo::shutdown());
+                }
                 VcpuExit::InternalError => {
                     return Ok(VmExitInfo {
                         reason: VmExitReason::InternalError,
                     });
                 }
+
                 VcpuExit::IoOut(port, data) => {
                     if port == 0xE9 {
                         for &b in data {
@@ -79,8 +107,7 @@ impl Vmmon {
                         continue;
                     }
 
-                    if self.uart.handles_port(port) {
-                        self.uart.io_out(port, data);
+                    if self.devices.pio.io_out(port, data) {
                         continue;
                     }
 
@@ -94,8 +121,7 @@ impl Vmmon {
                 }
 
                 VcpuExit::IoIn(port, data) => {
-                    if self.uart.handles_port(port) {
-                        self.uart.io_in(port, data);
+                    if self.devices.pio.io_in(port, data) {
                         continue;
                     }
 
@@ -107,6 +133,7 @@ impl Vmmon {
                         )),
                     });
                 }
+
                 other => {
                     return Ok(VmExitInfo {
                         reason: VmExitReason::Unhandled(format!("{other:?}")),

@@ -1,3 +1,5 @@
+use crate::devices::bus::pio::PioDevice;
+
 #[derive(Debug, Clone)]
 pub struct Uart16550 {
     base_port: u16,
@@ -63,7 +65,6 @@ impl Uart16550 {
                 if self.dlab() {
                     self.dll = val;
                 } else {
-                    // THR: transmit -> print to console
                     print!("{}", val as char);
                     use std::io::Write;
                     let _ = std::io::stdout().flush();
@@ -129,5 +130,19 @@ impl Uart16550 {
             7 => self.scr,
             _ => 0,
         }
+    }
+}
+
+impl PioDevice for Uart16550 {
+    fn handles_port(&self, port: u16) -> bool {
+        Uart16550::handles_port(self, port)
+    }
+
+    fn io_in(&mut self, port: u16, data: &mut [u8]) {
+        Uart16550::io_in(self, port, data)
+    }
+
+    fn io_out(&mut self, port: u16, data: &[u8]) {
+        Uart16550::io_out(self, port, data)
     }
 }

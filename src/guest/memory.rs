@@ -38,6 +38,10 @@ impl GuestMemory {
         self.mmap[start..end].copy_from_slice(bytes);
     }
 
+    pub fn read(&self, gpa: u64, out: &mut [u8]) {
+        out.copy_from_slice(self.slice(gpa, out.len()));
+    }
+
     pub fn write_zeros(&mut self, gpa: u64, len: usize) {
         let start = gpa as usize;
         let end = start + len;
@@ -48,5 +52,11 @@ impl GuestMemory {
         let start = gpa as usize;
         let end = start + len;
         &mut self.mmap[start..end]
+    }
+
+    pub fn slice(&self, gpa: u64, len: usize) -> &[u8] {
+        let start = gpa as usize;
+        let end = start + len;
+        &self.mmap[start..end]
     }
 }
