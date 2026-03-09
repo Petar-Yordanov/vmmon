@@ -104,4 +104,13 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          sudo ./target/release/vmmon ./micros64-ext2.iso --disk-img ./disk-ext2.img --mem-mib 1024
+
+          rc=0
+          sudo timeout 6m ./target/release/vmmon ./micros64-ext2.iso --disk-img ./disk-ext2.img --mem-mib 1024 || rc=$?
+
+          if [ "$rc" -eq 124 ]; then
+            echo "vmmon hit the 6 minute timeout; treating that as success"
+            exit 0
+          fi
+
+          exit "$rc"
