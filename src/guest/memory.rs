@@ -20,14 +20,6 @@ impl GuestMemory {
         self.size
     }
 
-    pub fn write_u64(&mut self, gpa: u64, v: u64) {
-        self.write(gpa, &v.to_le_bytes());
-    }
-
-    pub fn write_u32(&mut self, gpa: u64, v: u32) {
-        self.write(gpa, &v.to_le_bytes());
-    }
-
     pub fn as_ptr_u64(&self) -> u64 {
         self.mmap.as_ptr() as u64
     }
@@ -58,5 +50,45 @@ impl GuestMemory {
         let start = gpa as usize;
         let end = start + len;
         &self.mmap[start..end]
+    }
+
+    pub fn write_u8(&mut self, gpa: u64, v: u8) {
+        self.write(gpa, &[v]);
+    }
+
+    pub fn read_u8(&self, gpa: u64) -> u8 {
+        let mut b = [0u8; 1];
+        self.read(gpa, &mut b);
+        b[0]
+    }
+
+    pub fn write_u16(&mut self, gpa: u64, v: u16) {
+        self.write(gpa, &v.to_le_bytes());
+    }
+
+    pub fn read_u16(&self, gpa: u64) -> u16 {
+        let mut b = [0u8; 2];
+        self.read(gpa, &mut b);
+        u16::from_le_bytes(b)
+    }
+
+    pub fn write_u32(&mut self, gpa: u64, v: u32) {
+        self.write(gpa, &v.to_le_bytes());
+    }
+
+    pub fn read_u32(&self, gpa: u64) -> u32 {
+        let mut b = [0u8; 4];
+        self.read(gpa, &mut b);
+        u32::from_le_bytes(b)
+    }
+
+    pub fn write_u64(&mut self, gpa: u64, v: u64) {
+        self.write(gpa, &v.to_le_bytes());
+    }
+
+    pub fn read_u64(&self, gpa: u64) -> u64 {
+        let mut b = [0u8; 8];
+        self.read(gpa, &mut b);
+        u64::from_le_bytes(b)
     }
 }

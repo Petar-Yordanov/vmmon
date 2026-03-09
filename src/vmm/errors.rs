@@ -9,17 +9,24 @@ pub enum VmmonError {
     Kvm(kvm_ioctls::Error),
     Elf(String),
     Boot(String),
+    Unsupported(String),
 }
 
 impl VmmonError {
     pub fn config(msg: impl Into<String>) -> Self {
         Self::Config(msg.into())
     }
+
     pub fn elf(msg: impl Into<String>) -> Self {
         Self::Elf(msg.into())
     }
+
     pub fn boot(msg: impl Into<String>) -> Self {
         Self::Boot(msg.into())
+    }
+
+    pub fn unsupported(msg: impl Into<String>) -> Self {
+        Self::Unsupported(msg.into())
     }
 }
 
@@ -31,6 +38,7 @@ impl fmt::Display for VmmonError {
             VmmonError::Kvm(e) => write!(f, "kvm error: {e}"),
             VmmonError::Elf(s) => write!(f, "elf error: {s}"),
             VmmonError::Boot(s) => write!(f, "boot error: {s}"),
+            VmmonError::Unsupported(s) => write!(f, "unsupported: {s}"),
         }
     }
 }

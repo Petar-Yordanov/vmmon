@@ -21,3 +21,5 @@ target
 #.idea/
 
 kernel/
+
+disk-ext2.img
