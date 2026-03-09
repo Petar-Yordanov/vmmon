@@ -29,6 +29,7 @@ jobs:
 
       - name: Download latest micros main artifact
         env:
+          GH_TOKEN: ${{ secrets.MICROS_ARTIFACTS_TOKEN }}
           OWNER: Petar-Yordanov
           REPO: micros
           ARTIFACT_NAME: micros64-ext2
@@ -36,12 +37,14 @@ jobs:
           set -euo pipefail
 
           API="https://api.github.com"
+          AUTH_HEADER=(-H "Authorization: Bearer ${GH_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28")
 
           echo "Finding latest successful run on main..."
 
           RUN_ID=$(
             curl -fsSL \
               -H "Accept: application/vnd.github+json" \
+              "${AUTH_HEADER[@]}" \
               "${API}/repos/${OWNER}/${REPO}/actions/runs?branch=main&status=success&per_page=20" \
             | jq -r '
                 .workflow_runs
@@ -51,12 +54,14 @@ jobs:
               '
           )
 
+          test -n "${RUN_ID}"
           test "${RUN_ID}" != "null"
           echo "Using run id: ${RUN_ID}"
 
           ARTIFACT_ID=$(
             curl -fsSL \
               -H "Accept: application/vnd.github+json" \
+              "${AUTH_HEADER[@]}" \
               "${API}/repos/${OWNER}/${REPO}/actions/runs/${RUN_ID}/artifacts" \
             | jq -r --arg NAME "${ARTIFACT_NAME}" '
                 .artifacts[]
@@ -74,6 +79,7 @@ jobs:
 
           curl -fL \
             -H "Accept: application/vnd.github+json" \
+            "${AUTH_HEADER[@]}" \
             "${API}/repos/${OWNER}/${REPO}/actions/artifacts/${ARTIFACT_ID}/zip" \
             -o .ci-artifacts/micros64-ext2.zip
 
@@ -83,14 +89,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          # adjust these if the zip contains a subdirectory
           find .ci-artifacts/extracted -type f \( -name "*.iso" -o -name "*.img" -o -name "kernel.elf" \) -print
 
-          cp "$(find .ci-artifacts/extracted -type f -name 'kernel.elf' | head -n1)" ./kernel.elf
           cp "$(find .ci-artifacts/extracted -type f -name '*.img' | head -n1)" ./disk-ext2.img
           cp "$(find .ci-artifacts/extracted -type f -name '*.iso' | head -n1)" ./micros64-ext2.iso
 
-          ls -lh ./kernel.elf ./disk-ext2.img ./micros64-ext2.iso
+          ls -lh ./disk-ext2.img ./micros64-ext2.iso
 
       - name: Build vmmon (release)
         run: |
@@ -100,4 +104,4 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          sudo ./target/release/vmmon ./kernel.elf
+          sudo ./target/release/vmmon ./micros64-ext2.iso --disk-img ./disk-ext2.img --mem-mib 1024
