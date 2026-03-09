@@ -21,10 +21,76 @@ jobs:
             build-essential pkg-config \
             clang lld \
             ca-certificates \
+            curl jq unzip \
             qemu-system-x86 qemu-utils
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Download latest micros main artifact
+        env:
+          OWNER: Petar-Yordanov
+          REPO: micros
+          ARTIFACT_NAME: micros64-ext2
+        run: |
+          set -euo pipefail
+
+          API="https://api.github.com"
+
+          echo "Finding latest successful run on main..."
+
+          RUN_ID=$(
+            curl -fsSL \
+              -H "Accept: application/vnd.github+json" \
+              "${API}/repos/${OWNER}/${REPO}/actions/runs?branch=main&status=success&per_page=20" \
+            | jq -r '
+                .workflow_runs
+                | sort_by(.created_at)
+                | reverse
+                | .[0].id
+              '
+          )
+
+          test "${RUN_ID}" != "null"
+          echo "Using run id: ${RUN_ID}"
+
+          ARTIFACT_ID=$(
+            curl -fsSL \
+              -H "Accept: application/vnd.github+json" \
+              "${API}/repos/${OWNER}/${REPO}/actions/runs/${RUN_ID}/artifacts" \
+            | jq -r --arg NAME "${ARTIFACT_NAME}" '
+                .artifacts[]
+                | select(.name == $NAME)
+                | .id
+              ' \
+            | head -n1
+          )
+
+          test -n "${ARTIFACT_ID}"
+          test "${ARTIFACT_ID}" != "null"
+          echo "Artifact id: ${ARTIFACT_ID}"
+
+          mkdir -p .ci-artifacts
+
+          curl -fL \
+            -H "Accept: application/vnd.github+json" \
+            "${API}/repos/${OWNER}/${REPO}/actions/artifacts/${ARTIFACT_ID}/zip" \
+            -o .ci-artifacts/micros64-ext2.zip
+
+          unzip -o .ci-artifacts/micros64-ext2.zip -d .ci-artifacts/extracted
+
+      - name: Place boot artifacts
+        run: |
+          set -euo pipefail
+
+          # adjust these if the zip contains a subdirectory
+          find .ci-artifacts/extracted -type f \( -name "*.iso" -o -name "*.img" -o -name "kernel.elf" \) -print
+
+          cp "$(find .ci-artifacts/extracted -type f -name 'kernel.elf' | head -n1)" ./kernel.elf
+          cp "$(find .ci-artifacts/extracted -type f -name '*.img' | head -n1)" ./disk-ext2.img
+          cp "$(find .ci-artifacts/extracted -type f -name '*.iso' | head -n1)" ./micros64-ext2.iso
+
+          ls -lh ./kernel.elf ./disk-ext2.img ./micros64-ext2.iso
 
       - name: Build vmmon (release)
         run: |
@@ -34,5 +100,4 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-
           sudo ./target/release/vmmon ./kernel.elf
