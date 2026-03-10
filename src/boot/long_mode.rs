@@ -68,7 +68,7 @@ const HHDM_OFFSET: u64 = 0xffff_8000_0000_0000;
 fn build_paging(
     mem: &mut GuestMemory,
     layout: &GuestLayout,
-    load: &ElfLoadResult,
+    _load: &ElfLoadResult,
     guest_mem_size_bytes: u64,
 ) -> Result<u64> {
     let pml4_pa = layout.page_tables_phys;

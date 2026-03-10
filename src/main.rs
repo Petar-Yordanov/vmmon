@@ -14,6 +14,6 @@ fn main() -> vmm::Result<()> {
 
     let mut vm = Vmmon::build(cfg)?;
     let exit = vm.run()?;
-    println!("{exit:?}");
+    println!("{exit}");
     Ok(())
 }

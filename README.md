@@ -145,26 +145,63 @@ The VMM loads the kernel ELF into guest RAM, enters 64-bit long mode, provides t
   - [x] vCPU run loop + exit dispatch (PIO/MMIO)
   - [x] Debug output from guest
 
-- [x] **Boot MicrOS**
+- [x] **Boot**
   - [x] Enter 64-bit long mode (page tables + control regs)
   - [x] Load MicrOS ELF into guest memory
-  - [x] Implement the minimal Limine protocol responses MicrOS needs
-  - [x] Jump to kernel entry and reach early serial logs
+  - [x] Implement minimal Limine protocol support
+    - [x] Memory map response
+    - [x] HHDM response
+    - [x] Framebuffer response
+  - [x] Jump to kernel entry
+  - [x] Reach MicrOS kernel initialization
+  - [x] Reach MicrOS storage / VFS selftests
 
-- [ ] **Minimal platform MicrOS expects**
-  - [ ] KVM irqchip setup (so MicrOS can use APIC timer + IRQs)
-  - [ ] Shutdown/reboot handling (KVM exits mapped to clean host behavior)
-  - [x] Expose RTC/time data (MicrOS reads RTC; keep it consistent)
+- [ ] **Interrupts and machine control**
+  - [ ] KVM irqchip setup
+  - [ ] Local APIC interrupt delivery
+  - [ ] APIC timer compatible delivery
+  - [ ] Shutdown handling
+  - [ ] Reboot handling
 
-- [ ] **Devices**
-  - [ ] PCI config space (enough for enumeration)
-    - [x] Uart16550
-    - [x] Pic8259
-    - [x] CmosRtc
-    - [x] Dma8237
-  - [ ] virtio-blk backed by a host file (`disk.img`) for MicrOS FAT32/ext2/VFS
-  - [ ] virtio-input events (keyboard + mouse)
-  - [ ] Interrupt delivery for virtio (polling first, then proper IRQs)
+- [x] **Time devices**
+  - [x] CMOS RTC support
+  - [x] RTC / time data compatible with MicrOS expectations
+
+- [x] **Legacy devices**
+  - [x] Uart16550
+  - [x] Pic8259
+  - [x] CmosRtc
+  - [x] Dma8237
+
+- [x] **PCI**
+  - [x] PCI config space access
+  - [x] PCI enumeration support
+  - [x] BAR probing support
+  - [x] BAR mapping model for virtio PCI devices
+  - [x] Virtio PCI capability exposure
+
+- [x] **virtio-blk**
+  - [x] Common configuration support
+  - [x] Device configuration support
+  - [x] Notify path
+  - [x] Host-file-backed disk image backend
+  - [x] Polling-based request processing
+  - [x] MicrOS virtio-blk bring-up
+  - [x] MicrOS FAT32 / ext2 mount compatibility
+  - [x] MicrOS VFS read / write / append compatibility
+  - [ ] Interrupt-driven request completion
+
+- [ ] **virtio-input**
+  - [ ] Keyboard events
+  - [ ] Mouse events
+  - [ ] MicrOS virtio-input compatibility
+  - [ ] Interrupt-driven input delivery
+
+- [ ] **MicrOS runtime support**
+  - [ ] Scheduler / timer runtime compatibility
+  - [ ] Userspace bootstrap compatibility
+  - [ ] Window manager compatibility
+  - [ ] GUI runtime compatibility
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

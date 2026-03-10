@@ -1,5 +1,5 @@
 use crate::{
-    boot::elf::{ElfLoadResult, LoadedSeg},
+    boot::elf::ElfLoadResult,
     guest::{layout::GuestLayout, memory::GuestMemory},
     vmm::{Result, VmmonError},
 };
@@ -16,6 +16,13 @@ impl Range {
     fn end(self) -> u64 {
         self.base.saturating_add(self.len)
     }
+}
+
+const HHDM_OFFSET: u64 = 0xffff_8000_0000_0000;
+
+#[inline]
+fn phys_to_hhdm(paddr: u64) -> u64 {
+    HHDM_OFFSET.wrapping_add(paddr)
 }
 
 fn align_down(x: u64, a: u64) -> u64 {
@@ -99,6 +106,12 @@ impl GuestBump {
 
         self.cur = next;
         Ok(aligned)
+    }
+
+    fn alloc_zeroed(&mut self, mem: &mut GuestMemory, size: u64, align: u64) -> Result<u64> {
+        let gpa = self.alloc(size, align)?;
+        mem.write_zeros(gpa, size as usize);
+        Ok(gpa)
     }
 }
 
@@ -207,7 +220,7 @@ fn kernel_phys_span(load: &ElfLoadResult) -> Range {
 
 pub fn install_minimal_limine(
     mem: &mut GuestMemory,
-    layout: &GuestLayout,
+    _layout: &GuestLayout,
     load: &ElfLoadResult,
     guest_mem_size_bytes: u64,
 ) -> Result<()> {
@@ -268,50 +281,52 @@ pub fn install_minimal_limine(
         framebuffer_ranges,
     );
 
-    let entry_bytes = (core::mem::size_of::<LimineMemmapEntry>() as u64) * (entries.len() as u64);
-    let entries_gpa = bump.alloc(entry_bytes, 8)?;
+    let entry_size = core::mem::size_of::<LimineMemmapEntry>() as u64;
+    let entry_bytes = entry_size * (entries.len() as u64);
+    let entries_gpa = bump.alloc_zeroed(mem, entry_bytes, 16)?;
     for (i, e) in entries.iter().enumerate() {
-        let off = entries_gpa + (i as u64) * (core::mem::size_of::<LimineMemmapEntry>() as u64);
+        let off = entries_gpa + (i as u64) * entry_size;
         mem.write(off + 0, &e.base.to_le_bytes());
         mem.write(off + 8, &e.length.to_le_bytes());
         mem.write(off + 16, &e.typ.to_le_bytes());
     }
 
     let ptr_table_bytes = 8u64 * (entries.len() as u64);
-    let ptrs_gpa = bump.alloc(ptr_table_bytes, 8)?;
+    let ptrs_gpa = bump.alloc_zeroed(mem, ptr_table_bytes, 16)?;
     for i in 0..entries.len() {
-        let p = entries_gpa + (i as u64) * (core::mem::size_of::<LimineMemmapEntry>() as u64);
-        write_u64(mem, ptrs_gpa + (i as u64) * 8, p);
+        let p = entries_gpa + (i as u64) * entry_size;
+        write_u64(mem, ptrs_gpa + (i as u64) * 8, phys_to_hhdm(p));
     }
 
-    let memmap_resp_gpa = bump.alloc(core::mem::size_of::<LimineMemmapResponse>() as u64, 8)?;
-    write_u64(mem, memmap_resp_gpa + 0, 0); // revision
+    let memmap_resp_gpa =
+        bump.alloc_zeroed(mem, core::mem::size_of::<LimineMemmapResponse>() as u64, 16)?;
+    write_u64(mem, memmap_resp_gpa + 0, 0);
     write_u64(mem, memmap_resp_gpa + 8, entries.len() as u64);
-    write_u64(mem, memmap_resp_gpa + 16, ptrs_gpa);
+    write_u64(mem, memmap_resp_gpa + 16, phys_to_hhdm(ptrs_gpa));
 
     write_u64(
         mem,
         memmap_req_gpa + LIMINE_REQUEST_RESPONSE_OFF,
-        memmap_resp_gpa,
+        phys_to_hhdm(memmap_resp_gpa),
     );
 
-    let hhdm_offset = 0xffff_8000_0000_0000u64;
-
-    let hhdm_resp_gpa = bump.alloc(core::mem::size_of::<LimineHhdmResponse>() as u64, 8)?;
+    let hhdm_resp_gpa =
+        bump.alloc_zeroed(mem, core::mem::size_of::<LimineHhdmResponse>() as u64, 16)?;
     write_u64(mem, hhdm_resp_gpa + 0, 0);
-    write_u64(mem, hhdm_resp_gpa + 8, hhdm_offset);
+    write_u64(mem, hhdm_resp_gpa + 8, HHDM_OFFSET);
 
     write_u64(
         mem,
         hhdm_req_gpa + LIMINE_REQUEST_RESPONSE_OFF,
-        hhdm_resp_gpa,
+        phys_to_hhdm(hhdm_resp_gpa),
     );
 
     if let Some(fb_req_gpa) = fb_req_gpa {
         mem.write_zeros(fb_base, fb_size as usize);
 
-        let fb_struct_gpa = bump.alloc(core::mem::size_of::<LimineFramebuffer>() as u64, 8)?;
-        write_u64(mem, fb_struct_gpa + 0, fb_base);
+        let fb_struct_gpa =
+            bump.alloc_zeroed(mem, core::mem::size_of::<LimineFramebuffer>() as u64, 16)?;
+        write_u64(mem, fb_struct_gpa + 0, phys_to_hhdm(fb_base));
         write_u64(mem, fb_struct_gpa + 8, fb_w);
         write_u64(mem, fb_struct_gpa + 16, fb_h);
         write_u64(mem, fb_struct_gpa + 24, fb_pitch);
@@ -329,22 +344,57 @@ pub fn install_minimal_limine(
         write_u64(mem, edid_size_off, 0);
         write_u64(mem, edid_size_off + 8, 0);
 
-        let fb_ptrs_gpa = bump.alloc(8, 8)?;
-        write_u64(mem, fb_ptrs_gpa, fb_struct_gpa);
+        let fb_ptrs_gpa = bump.alloc_zeroed(mem, 8, 16)?;
+        write_u64(mem, fb_ptrs_gpa, phys_to_hhdm(fb_struct_gpa));
 
-        let fb_resp_gpa =
-            bump.alloc(core::mem::size_of::<LimineFramebufferResponse>() as u64, 8)?;
-        write_u64(mem, fb_resp_gpa + 0, 0); // revision
-        write_u64(mem, fb_resp_gpa + 8, 1); // count
-        write_u64(mem, fb_resp_gpa + 16, fb_ptrs_gpa);
+        let fb_resp_gpa = bump.alloc_zeroed(
+            mem,
+            core::mem::size_of::<LimineFramebufferResponse>() as u64,
+            16,
+        )?;
+        write_u64(mem, fb_resp_gpa + 0, 0);
+        write_u64(mem, fb_resp_gpa + 8, 1);
+        write_u64(mem, fb_resp_gpa + 16, phys_to_hhdm(fb_ptrs_gpa));
 
-        write_u64(mem, fb_req_gpa + LIMINE_REQUEST_RESPONSE_OFF, fb_resp_gpa);
+        write_u64(
+            mem,
+            fb_req_gpa + LIMINE_REQUEST_RESPONSE_OFF,
+            phys_to_hhdm(fb_resp_gpa),
+        );
+
+        eprintln!(
+            "vmmon: limine fb req={:#x} resp_phys={:#x} resp_virt={:#x} ptrs_phys={:#x} ptrs_virt={:#x} fb_phys={:#x} fb_virt={:#x}",
+            fb_req_gpa,
+            fb_resp_gpa,
+            phys_to_hhdm(fb_resp_gpa),
+            fb_ptrs_gpa,
+            phys_to_hhdm(fb_ptrs_gpa),
+            fb_struct_gpa,
+            phys_to_hhdm(fb_struct_gpa),
+        );
     }
 
     let mm_ptr = read_u64(mem, memmap_req_gpa + LIMINE_REQUEST_RESPONSE_OFF);
     if mm_ptr == 0 {
         return Err(VmmonError::boot("memmap response pointer stayed null"));
     }
+
+    eprintln!(
+        "vmmon: limine memmap req={:#x} resp_phys={:#x} resp_virt={:#x} entries_phys={:#x} ptrs_phys={:#x} ptrs_virt={:#x}",
+        memmap_req_gpa,
+        memmap_resp_gpa,
+        phys_to_hhdm(memmap_resp_gpa),
+        entries_gpa,
+        ptrs_gpa,
+        phys_to_hhdm(ptrs_gpa),
+    );
+    eprintln!(
+        "vmmon: limine hhdm req={:#x} resp_phys={:#x} resp_virt={:#x} offset={:#x}",
+        hhdm_req_gpa,
+        hhdm_resp_gpa,
+        phys_to_hhdm(hhdm_resp_gpa),
+        HHDM_OFFSET,
+    );
 
     Ok(())
 }
